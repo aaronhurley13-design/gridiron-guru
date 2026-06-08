@@ -332,71 +332,75 @@ st.markdown("---")
 
 col1, col2 = st.columns(2)
 with col1:
-    st.header("📋 Record a Pick")
-    
+    st.header("📋 Record a pick")
         # ==========================================
     # ⏱️ SMART PICK TIMER COMPONENT
     # ==========================================
     timer_html = f"""
-    <div id="timer-box" style="font-family:sans-serif; text-align:center; padding:12px; background-color:#1e1e1e; color:white; border-radius:10px; border: 2px solid #2e2e2e; margin-bottom:15px; display: flex; flex-direction: column; align-items: center;">
+    <div id="timer-box-{current_pick}" style="font-family:sans-serif; text-align:center; padding:12px; background-color:#1e1e1e; color:white; border-radius:10px; border: 2px solid #2e2e2e; margin-bottom:15px; display: flex; flex-direction: column; align-items: center;">
       <div style="font-size:12px; color:#aaa; font-weight:bold; letter-spacing:1px; margin-bottom:5px;">ROUND {round_num} • PICK {current_pick} CLOCK</div>
-      <div id="clock" style="font-size:36px; font-weight:bold; color:#00ff00; line-height:1; margin-bottom: 10px;">90</div>
-      <button id="start-btn" style="background-color:#ff4b4b; color:white; border:none; padding:8px 16px; border-radius:5px; font-weight:bold; cursor:pointer;">▶️ Start Clock</button>
+      <div id="clock-{current_pick}" style="font-size:36px; font-weight:bold; color:#00ff00; line-height:1; margin-bottom: 10px;">90</div>
+      <button id="start-btn-{current_pick}" style="background-color:#ff4b4b; color:white; border:none; padding:8px 16px; border-radius:5px; font-weight:bold; cursor:pointer;">▶️ Start Clock</button>
     </div>
     <script>
-      const currentPick = {current_pick};
-      const clockEl = document.getElementById('clock');
-      const startBtn = document.getElementById('start-btn');
-      const timerBox = document.getElementById('timer-box');
-      
-      let endTime = sessionStorage.getItem('pickEndTime_' + currentPick);
-      let timerInterval;
+      (function() {{
+          const currentPick = {current_pick};
+          const clockEl = document.getElementById('clock-' + currentPick);
+          const startBtn = document.getElementById('start-btn-' + currentPick);
+          const timerBox = document.getElementById('timer-box-' + currentPick);
+          
+          let endTime = sessionStorage.getItem('pickEndTime_' + currentPick);
+          let timerInterval;
 
-      function updateClock() {{
-        if (!endTime) return;
-        let now = new Date().getTime();
-        let timeLeft = Math.max(0, Math.ceil((endTime - now) / 1000));
-        
-        clockEl.innerText = timeLeft;
-        
-        if (timeLeft <= 15) {{
-          clockEl.style.color = '#ff4b4b';
-          timerBox.style.borderColor = '#ff4b4b';
-          timerBox.style.boxShadow = '0px 0px 10px rgba(255, 75, 75, 0.5)';
-        }} else {{
-          clockEl.style.color = '#00ff00';
-          timerBox.style.borderColor = '#2e2e2e';
-          timerBox.style.boxShadow = 'none';
-        }}
-        
-        if (timeLeft <= 0) {{
-          clearInterval(timerInterval);
-          clockEl.innerText = "TIME OUT 🚨";
-          startBtn.style.display = 'none';
-        }}
-      }}
+          function updateClock() {{
+            if (!endTime) return;
+            let now = new Date().getTime();
+            let timeLeft = Math.max(0, Math.ceil((endTime - now) / 1000));
+            
+            if (!clockEl) return;
+            clockEl.innerText = timeLeft;
+            
+            if (timeLeft <= 15) {{
+              clockEl.style.color = '#ff4b4b';
+              timerBox.style.borderColor = '#ff4b4b';
+              timerBox.style.boxShadow = '0px 0px 10px rgba(255, 75, 75, 0.5)';
+            }} else {{
+              clockEl.style.color = '#00ff00';
+              timerBox.style.borderColor = '#2e2e2e';
+              timerBox.style.boxShadow = 'none';
+            }}
+            
+            if (timeLeft <= 0) {{
+              clearInterval(timerInterval);
+              clockEl.innerText = "TIME OUT 🚨";
+              if (startBtn) startBtn.style.display = 'none';
+            }}
+          }}
 
-      function startTimer() {{
-        let now = new Date().getTime();
-        endTime = now + (90 * 1000); 
-        sessionStorage.setItem('pickEndTime_' + currentPick, endTime);
-        startBtn.style.display = 'none';
-        timerInterval = setInterval(updateClock, 1000);
-        updateClock();
-      }}
+          function startTimer() {{
+            let now = new Date().getTime();
+            endTime = now + (90 * 1000); 
+            sessionStorage.setItem('pickEndTime_' + currentPick, endTime);
+            if (startBtn) startBtn.style.display = 'none';
+            timerInterval = setInterval(updateClock, 1000);
+            updateClock();
+          }}
 
-      if (endTime) {{
-        startBtn.style.display = 'none';
-        timerInterval = setInterval(updateClock, 1000);
-        updateClock();
-      }} else {{
-        clockEl.innerText = "90";
-        startBtn.addEventListener('click', startTimer);
-      }}
+          if (endTime) {{
+            if (startBtn) startBtn.style.display = 'none';
+            timerInterval = setInterval(updateClock, 1000);
+            updateClock();
+          }} else {{
+            if (clockEl) clockEl.innerText = "90";
+            if (startBtn) {{
+                startBtn.style.display = 'block';
+                startBtn.onclick = startTimer;
+            }}
+          }}
+      }})();
     </script>
     """
-    # ADDING THE UNIQUE KEY HERE FORCES STREAMLIT TO DESTROY/REBUILD ON EVERY PICK
-    st.components.v1.html(timer_html, height=145, scrolling=False, key=f"timer_component_{current_pick}")
+    st.components.v1.html(timer_html, height=145, scrolling=False)
 
     if not available_df.empty:
         all_available_names = [str(x) for x in available_df["player_name"].tolist() if pd.notna(x) and str(x).strip() != ""]
