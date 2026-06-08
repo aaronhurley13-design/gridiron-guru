@@ -24,6 +24,23 @@ st.markdown("""
     width: 28px !important;
     height: 28px !important;
 }
+/* Add the custom text right next to the arrow! */
+[data-testid="collapsedControl"]::after {
+    content: "⚙️ Input League Settings";
+    position: absolute;
+    left: 45px;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: #ff4b4b;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 15px;
+    font-size: 14px;
+    font-weight: bold;
+    white-space: nowrap;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -87,7 +104,7 @@ with image_col: st.image("https://neon-factory.com/cdn/shop/products/helmet-512-
 
 with st.sidebar:
     st.header("⚙️ Settings & Imports")
-    uploaded_csv = st.file_uploader("Upload temporary rankings (.csv), Not Required", type=["csv"])
+    uploaded_csv = st.file_uploader("Upload temporary rankings (.csv)", type=["csv"])
     if uploaded_csv is not None:
         try:
             temp_df = pd.read_csv(uploaded_csv)
@@ -212,7 +229,6 @@ with col2:
         display_df = display_df.rename(columns={"pick": "Pick", "team_name": "Team", "player": "Player", "position": "Position"})
         st.dataframe(display_df, use_container_width=True)
         
-        # 📥 NEW FEATURE: Download complete draft history as a CSV
         csv_buffer = io.StringIO()
         display_df.to_csv(csv_buffer, index=False)
         st.download_button(label="📥 Export Draft Results (CSV)", data=csv_buffer.getvalue(), file_name="draft_results.csv", mime="text/csv")
