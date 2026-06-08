@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import json, io, os
@@ -95,12 +96,28 @@ if 'kicker_scoring' not in st.session_state: st.session_state.kicker_scoring = p
 if 'defense_scoring' not in st.session_state: st.session_state.defense_scoring = pd.DataFrame([{"Stat": "Turnover", "Points": 2}, {"Stat": "Sack", "Points": 1}, {"Stat": "Safety", "Points": 2}])
 if 'roster_spots' not in st.session_state: st.session_state.roster_spots = pd.DataFrame([{"Position": "QB", "Count": 1}, {"Position": "RB", "Count": 2}, {"Position": "WR", "Count": 2}, {"Position": "TE", "Count": 1}, {"Position": "FLEX", "Count": 1}, {"Position": "K", "Count": 1}, {"Position": "DST", "Count": 1}, {"Position": "Bench", "Count": 6}])
 
+# Initialize Automated Player Tags (Can be expanded or manually supplemented)
+if 'player_tags' not in st.session_state:
+    st.session_state.player_tags = {
+        "Christian McCaffrey": "⭐ Target",
+        "Breece Hall": "⭐ Target",
+        "CeeDee Lamb": "⭐ Target",
+        "Puka Nacua": "🟢 Sleeper",
+        "Kyren Williams": "🟢 Sleeper",
+        "Garrett Wilson": "🟢 Sleeper"
+    }
+
+# Helper to cleanly show tags alongside player names in menus
+def tag_formatter(player_name):
+    tag = st.session_state.player_tags.get(player_name, "")
+    return f"{player_name} [{tag}]" if tag else player_name
+
 if 'team_names' not in st.session_state or type(st.session_state.team_names) is not pd.DataFrame or "ID" not in st.session_state.team_names.columns:
     st.session_state.team_names = pd.DataFrame([{"ID": i, "Team Name": f"Team {i}"} for i in range(1, 17)])
 
 title_col, image_col = st.columns([2, 1])
 with title_col: st.title("Gridiron Guru")
-with image_col: st.image("IMG_0106.png", width=300) # Updated line!
+with image_col: st.image("logo.png", width=150)
 
 with st.sidebar:
     st.header("⚙️ Settings & Imports")
@@ -151,6 +168,7 @@ with st.sidebar:
     if st.button("Reset Draft Board"):
         st.session_state.picks, st.session_state.queue = [], []
         st.session_state.all_players = load_initial_player_pool()
+        st.session_state.player_tags = {"Christian McCaffrey": "⭐ Target", "Breece Hall": "⭐ Target", "CeeDee Lamb": "⭐ Target", "Puka Nacua": "🟢 Sleeper", "Kyren Williams": "🟢 Sleeper", "Garrett Wilson": "🟢 Sleeper"}
         st.rerun()
 
 current_pick = len(st.session_state.picks) + 1
@@ -163,10 +181,10 @@ st.session_state.queue = [p for p in st.session_state.queue if p not in drafted_
 available_df = st.session_state.all_players[~st.session_state.all_players["player_name"].isin(drafted_names)] if "player_name" in st.session_state.all_players.columns else pd.DataFrame()
 
 # ==========================================
-# DRAFT QUEUE WITH POSITION FILTER 🎯
+# DRAFT QUEUE WITH POSITION FILTER & TAGS 🎯
 # ==========================================
 st.markdown("---")
-st.header("🎯 Draft Queue")
+st.header("🎯 Draft Queue & Custom Tags")
 if not available_df.empty:
     queue_filter = st.radio("Filter Queue by Position:", ["ALL", "QB", "RB", "WR", "TE", "K", "DST"], horizontal=True)
     
@@ -179,12 +197,31 @@ if not available_df.empty:
     safe_options = [str(x) for x in safe_options if pd.notna(x) and str(x).strip() != ""]
     safe_options.sort()
     
-    st.session_state.queue = st.multiselect("Search and pin players to your Watchlist:", options=safe_options, default=st.session_state.queue)
+    st.session_state.queue = st.multiselect("Search and pin players to your Watchlist:", options=safe_options, default=st.session_state.queue, format_func=tag_formatter)
     
     if st.session_state.queue:
         cols = st.columns(min(len(st.session_state.queue), 4))
         for i, q_player in enumerate(st.session_state.queue):
-            with cols[i % 4]: st.info(f"📌 {q_player}")
+            with cols[i % 4]: 
+                player_tag = st.session_state.player_tags.get(q_player, "No Tag")
+                st.info(f"📌 {q_player} \n`({player_tag})`")
+                
+    # 🏷️ MANUAL TAGGING INTERFACE
+    with st.expander("🏷️ Add / Edit Custom Player Tags"):
+        tag_col1, tag_col2 = st.columns(2)
+        all_players_list = sorted(list(set(st.session_state.all_players["player_name"].dropna().tolist())))
+        with tag_col1:
+            target_player = st.selectbox("Select Player to Tag:", options=all_players_list)
+        with tag_col2:
+            chosen_tag = st.selectbox("Assign Label:", options=["⭐ Target", "🟢 Sleeper", "🔴 Avoid", "Clear Tag"])
+            if st.button("Apply Label"):
+                if chosen_tag == "Clear Tag":
+                    st.session_state.player_tags.pop(target_player, None)
+                else:
+                    st.session_state.player_tags[target_player] = chosen_tag
+                st.success(f"Updated tag for {target_player}!")
+                st.rerun()
+
 st.markdown("---")
 
 col1, col2 = st.columns(2)
@@ -194,7 +231,7 @@ with col1:
         all_available_names = [str(x) for x in available_df["player_name"].tolist() if pd.notna(x) and str(x).strip() != ""]
         dropdown_options = st.session_state.queue + [p for p in all_available_names if p not in st.session_state.queue]
         
-        player = st.selectbox("Player drafted", options=dropdown_options)
+        player = st.selectbox("Player drafted", options=dropdown_options, format_func=tag_formatter)
         team_options = [team_name_map[i] for i in range(1, teams + 1)]
         safe_index = min(max(0, int(auto_team_id) - 1), max(0, len(team_options) - 1))
         
@@ -223,16 +260,34 @@ with col1:
 
 with col2:
     st.header("📊 Draft Board")
-    if st.session_state.picks:
-        display_df = pd.DataFrame(st.session_state.picks)
-        if "bye_week" in display_df.columns: display_df = display_df.drop(columns=["bye_week", "team"])
-        display_df = display_df.rename(columns={"pick": "Pick", "team_name": "Team", "player": "Player", "position": "Position"})
-        st.dataframe(display_df, use_container_width=True)
+    
+    tab_list, tab_matrix = st.tabs(["📋 List View", "🧱 Grid Matrix View"])
+    
+    with tab_list:
+        if st.session_state.picks:
+            display_df = pd.DataFrame(st.session_state.picks)
+            if "bye_week" in display_df.columns: display_df = display_df.drop(columns=["bye_week", "team"])
+            display_df = display_df.rename(columns={"pick": "Pick", "team_name": "Team", "player": "Player", "position": "Position"})
+            st.dataframe(display_df, use_container_width=True)
+            
+            csv_buffer = io.StringIO()
+            display_df.to_csv(csv_buffer, index=False)
+            st.download_button(label="📥 Export Draft Results (CSV)", data=csv_buffer.getvalue(), file_name="draft_results.csv", mime="text/csv")
+        else: st.info("No picks yet")
         
-        csv_buffer = io.StringIO()
-        display_df.to_csv(csv_buffer, index=False)
-        st.download_button(label="📥 Export Draft Results (CSV)", data=csv_buffer.getvalue(), file_name="draft_results.csv", mime="text/csv")
-    else: st.info("No picks yet")
+    with tab_matrix:
+        # Construct the matrix grid layout dynamically
+        total_rounds = int(st.session_state.roster_spots["Count"].sum()) if not st.session_state.roster_spots.empty else 16
+        matrix_grid = {team_name_map[i]: ["—"] * total_rounds for i in range(1, teams + 1)}
+        
+        for p in st.session_state.picks:
+            p_round = (p["pick"] - 1) // teams
+            p_team_name = team_name_map.get(p["team"])
+            if p_round < total_rounds and p_team_name in matrix_grid:
+                matrix_grid[p_team_name][p_round] = f"{p['player']} ({p['position']})"
+                
+        matrix_df = pd.DataFrame(matrix_grid, index=[f"Round {i+1}" for i in range(total_rounds)])
+        st.dataframe(matrix_df, use_container_width=True)
 
 st.markdown("---")
 st.header("📈 My Roster Progress")
