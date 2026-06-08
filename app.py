@@ -146,7 +146,7 @@ def get_vbd_map(df, teams_count):
 
 title_col, image_col = st.columns([2, 1])
 with title_col: st.title("Gridiron Guru")
-with image_col: st.image("logo.png", width=150)
+with image_col: st.image("IMG_0106.png", width=300)
 
 with st.sidebar:
     st.header("⚙️ Settings & Imports")
