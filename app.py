@@ -4,6 +4,29 @@ import json, io, os
 
 st.set_page_config(page_title="Gridiron Guru", page_icon="🏈", layout="wide")
 
+# ==========================================
+# CSS HACK: MAKE MOBILE SIDEBAR VISIBLE 📱
+# ==========================================
+st.markdown("""
+<style>
+/* Target the collapsed sidebar button */
+[data-testid="collapsedControl"] {
+    background-color: #ff4b4b !important; /* Streamlit's primary red */
+    border-radius: 50% !important;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.5) !important;
+    color: white !important;
+    padding: 5px !important;
+    z-index: 999999 !important;
+}
+/* Make the little arrow icon inside it bigger and white */
+[data-testid="collapsedControl"] svg {
+    fill: white !important;
+    width: 28px !important;
+    height: 28px !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 @st.cache_data
 def load_initial_player_pool():
     csv_files = [f for f in os.listdir('.') if f.endswith('.csv')]
