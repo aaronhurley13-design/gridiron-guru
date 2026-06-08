@@ -114,15 +114,20 @@ if 'queue' not in st.session_state: st.session_state.queue = []
 if 'kicker_scoring' not in st.session_state: st.session_state.kicker_scoring = pd.DataFrame([{"Range": "0-39 yds", "Points": 3}, {"Range": "40-49 yds", "Points": 4}, {"Range": "50+ yds", "Points": 5}, {"Range": "PAT", "Points": 1}])
 if 'defense_scoring' not in st.session_state: st.session_state.defense_scoring = pd.DataFrame([{"Stat": "Turnover", "Points": 2}, {"Stat": "Sack", "Points": 1}, {"Stat": "Safety", "Points": 2}])
 if 'roster_spots' not in st.session_state: st.session_state.roster_spots = pd.DataFrame([{"Position": "QB", "Count": 1}, {"Position": "RB", "Count": 2}, {"Position": "WR", "Count": 2}, {"Position": "TE", "Count": 1}, {"Position": "FLEX", "Count": 1}, {"Position": "K", "Count": 1}, {"Position": "DST", "Count": 1}, {"Position": "Bench", "Count": 6}])
-
-if 'player_tags' not in st.session_state:
-    st.session_state.player_tags = {"Christian McCaffrey": "⭐ Target", "Breece Hall": "⭐ Target", "CeeDee Lamb": "⭐ Target", "Puka Nacua": "🟢 Sleeper", "Kyren Williams": "🟢 Sleeper", "Garrett Wilson": "🟢 Sleeper"}
-
+if 'player_tags' not in st.session_state: st.session_state.player_tags = {"Christian McCaffrey": "⭐ Target", "Breece Hall": "⭐ Target", "CeeDee Lamb": "⭐ Target", "Puka Nacua": "🟢 Sleeper", "Kyren Williams": "🟢 Sleeper", "Garrett Wilson": "🟢 Sleeper"}
 if 'team_names' not in st.session_state or type(st.session_state.team_names) is not pd.DataFrame or "ID" not in st.session_state.team_names.columns:
     st.session_state.team_names = pd.DataFrame([{"ID": i, "Team Name": f"Team {i}"} for i in range(1, 17)])
+if 'clock_starts' not in st.session_state: st.session_state.clock_starts = {}
 
-if 'clock_starts' not in st.session_state:
-    st.session_state.clock_starts = {}
+# Sound Engine Trigger
+if 'last_pick_count' not in st.session_state: st.session_state.last_pick_count = 0
+current_pick_count = len(st.session_state.picks)
+
+if current_pick_count > st.session_state.last_pick_count:
+    st.markdown("""<audio autoplay style="display:none;"><source src="https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3" type="audio/mpeg"></audio>""", unsafe_allow_html=True)
+    st.session_state.last_pick_count = current_pick_count
+elif current_pick_count < st.session_state.last_pick_count:
+    st.session_state.last_pick_count = current_pick_count
 
 def get_vbd_map(df, teams_count):
     baselines = {}
@@ -146,6 +151,23 @@ def get_vbd_map(df, teams_count):
 title_col, image_col = st.columns([2, 1])
 with title_col: st.title("Gridiron Guru")
 with image_col: st.image("IMG_0106.png", width=300)
+
+# ==========================================
+# 📺 FEATURE 2: ESPN-STYLE LIVE TICKER
+# ==========================================
+if st.session_state.picks:
+    recent_picks = st.session_state.picks[-10:]
+    ticker_str = "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;🏈&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;".join(
+        [f"Pick {p['pick']}: {p['player']} ({p['position']}) — {p['team_name']}" for p in recent_picks]
+    )
+    ticker_html = f"""
+    <div style="background-color: #1e1e1e; border-top: 2px solid #ff4b4b; border-bottom: 2px solid #ff4b4b; padding: 6px 0; margin-bottom: 20px;">
+        <marquee scrollamount="6" style="color: white; font-weight: bold; font-size: 18px; font-family: sans-serif;">
+            {ticker_str}
+        </marquee>
+    </div>
+    """
+    st.markdown(ticker_html, unsafe_allow_html=True)
 
 with st.sidebar:
     st.header("⚙️ Settings & Imports")
@@ -213,6 +235,13 @@ available_df = st.session_state.all_players[~st.session_state.all_players["playe
 
 vbd_map = get_vbd_map(st.session_state.all_players, teams)
 
+def get_depletion(pos):
+    req_per_team = sum([int(r["Count"]) for _, r in st.session_state.roster_spots.iterrows() if r["Position"].upper() == pos])
+    if req_per_team == 0: req_per_team = 1
+    total_expected = req_per_team * teams
+    drafted_count = sum(1 for dp in st.session_state.picks if dp["position"] == pos)
+    return min((drafted_count / total_expected) * 100, 100) if total_expected > 0 else 0
+
 def tag_formatter(player_name):
     tag = st.session_state.player_tags.get(player_name, "")
     vbd_score = vbd_map.get(player_name, 0)
@@ -225,13 +254,6 @@ def tag_formatter(player_name):
 st.markdown("---")
 st.header("⚔️ Draft War Room")
 war_col1, war_col2, war_col3 = st.columns(3)
-
-def get_depletion(pos):
-    req_per_team = sum([int(r["Count"]) for _, r in st.session_state.roster_spots.iterrows() if r["Position"].upper() == pos])
-    if req_per_team == 0: req_per_team = 1
-    total_expected = req_per_team * teams
-    drafted_count = sum(1 for dp in st.session_state.picks if dp["position"] == pos)
-    return min((drafted_count / total_expected) * 100, 100) if total_expected > 0 else 0
 
 with war_col1:
     st.subheader("🎯 Massive Steal Alerts")
@@ -268,38 +290,12 @@ with war_col3:
         else: st.info("Board is stable. No positional point cliffs detected.")
 
 # ==========================================
-# 👀 UPCOMING TEAM NEEDS MATRIX
-# ==========================================
-st.markdown("---")
-st.header("👀 Upcoming Draft Team Needs")
-upcoming_picks_teams = []
-for future_pick_offset in range(4):
-    f_pick = current_pick + future_pick_offset
-    f_round = (f_pick - 1) // teams + 1
-    f_p_in_round = (f_pick - 1) % teams + 1
-    f_team_id = (teams - f_p_in_round + 1) if (draft_type == "Snake" and f_round % 2 == 0) else f_p_in_round
-    if f_team_id not in upcoming_picks_teams: upcoming_picks_teams.append(f_team_id)
-
-needs_cols = st.columns(len(upcoming_picks_teams))
-for idx, t_id in enumerate(upcoming_picks_teams):
-    t_name = team_name_map.get(t_id, f"Team {t_id}")
-    t_picks = [p for p in st.session_state.picks if p["team"] == t_id]
-    t_positions = [p["position"] for p in t_picks]
-    
-    with needs_cols[idx]:
-        is_me = " (YOU)" if t_id == my_team_id else ""
-        st.markdown(f"**📢 {t_name}{is_me}**")
-        if t_positions: st.caption(f"Filled: {', '.join(t_positions)}")
-        else: st.caption("No players rostered yet.")
-
-# ==========================================
 # DRAFT QUEUE WITH POSITION FILTER & TAGS 🎯
 # ==========================================
 st.markdown("---")
 st.header("🎯 Draft Queue & Custom Tags")
 if not available_df.empty:
     queue_filter = st.radio("Filter Queue by Position:", ["ALL", "QB", "RB", "WR", "TE", "K", "DST"], horizontal=True)
-    
     if queue_filter == "ALL": filtered_names = available_df["player_name"].tolist()
     else: filtered_names = available_df[available_df['position'].str.contains(queue_filter, case=False, na=False)]["player_name"].tolist()
     
@@ -308,7 +304,6 @@ if not available_df.empty:
     safe_options.sort()
     
     st.session_state.queue = st.multiselect("Search and pin players to your Watchlist:", options=safe_options, default=st.session_state.queue, format_func=tag_formatter)
-    
     if st.session_state.queue:
         cols = st.columns(min(len(st.session_state.queue), 4))
         for i, q_player in enumerate(st.session_state.queue):
@@ -316,18 +311,6 @@ if not available_df.empty:
                 player_tag = st.session_state.player_tags.get(q_player, "No Tag")
                 vbd_val = vbd_map.get(q_player, 0)
                 st.info(f"📌 {q_player} \n`Tag: {player_tag}` | `VBD: {vbd_val}`")
-                
-    with st.expander("🏷️ Add / Edit Custom Player Tags"):
-        tag_col1, tag_col2 = st.columns(2)
-        all_players_list = sorted(list(set(st.session_state.all_players["player_name"].dropna().tolist())))
-        with tag_col1: target_player = st.selectbox("Select Player to Tag:", options=all_players_list)
-        with tag_col2:
-            chosen_tag = st.selectbox("Assign Label:", options=["⭐ Target", "🟢 Sleeper", "🔴 Avoid", "Clear Tag"])
-            if st.button("Apply Label"):
-                if chosen_tag == "Clear Tag": st.session_state.player_tags.pop(target_player, None)
-                else: st.session_state.player_tags[target_player] = chosen_tag
-                st.success(f"Updated tag for {target_player}!")
-                st.rerun()
 
 # ==========================================
 # ⚖️ HEAD-TO-HEAD PLAYER COMPARISON
@@ -335,20 +318,14 @@ if not available_df.empty:
 st.markdown("---")
 with st.expander("⚖️ Head-to-Head Player Comparison", expanded=False):
     comp_col1, comp_col2 = st.columns(2)
-    
     if not available_df.empty:
         all_avail_sorted = sorted([str(x) for x in available_df["player_name"].tolist() if pd.notna(x) and str(x).strip() != ""])
-        
-        with comp_col1:
-            player_a = st.selectbox("Player A", options=["-- Select Player --"] + all_avail_sorted, index=0)
-        with comp_col2:
-            player_b = st.selectbox("Player B", options=["-- Select Player --"] + all_avail_sorted, index=0)
+        with comp_col1: player_a = st.selectbox("Player A", options=["-- Select Player --"] + all_avail_sorted, index=0)
+        with comp_col2: player_b = st.selectbox("Player B", options=["-- Select Player --"] + all_avail_sorted, index=0)
             
         if player_a != "-- Select Player --" and player_b != "-- Select Player --":
             data_a = st.session_state.all_players[st.session_state.all_players["player_name"] == player_a].iloc[0]
             data_b = st.session_state.all_players[st.session_state.all_players["player_name"] == player_b].iloc[0]
-            
-            # Calculate current team byes for collision check
             my_current_roster = [p for p in st.session_state.picks if p["team"] == my_team_id]
             my_byes = [int(float(p.get("bye_week", 0))) for p in my_current_roster if pd.notna(p.get("bye_week"))]
             
@@ -359,29 +336,25 @@ with st.expander("⚖️ Head-to-Head Player Comparison", expanded=False):
                 vbd = vbd_map.get(name, 0)
                 bye = data_row.get("bye week", "N/A")
                 depletion = get_depletion(pos)
-                
                 with col:
                     st.markdown(f"### {name} ({pos})")
                     st.metric("Projected Points", f"{pts} pts")
                     st.metric("VBD Score", f"+{vbd}" if vbd > 0 else f"{vbd}")
-                    st.metric(f"{pos} Position Scarcity", f"{int(depletion)}% Depleted")
-                    
-                    if pd.notna(bye):
-                        bye_int = int(float(bye))
-                        if bye_int in my_byes:
-                            st.error(f"🚨 **Bye Week: {bye_int}** (Collision with current roster!)")
-                        else:
-                            st.success(f"✅ **Bye Week: {bye_int}** (Clear)")
+                    st.metric(f"{pos} Scarcity", f"{int(depletion)}% Depleted")
+                    if pd.notna(bye) and int(float(bye)) in my_byes: st.error(f"🚨 **Bye Week: {int(float(bye))}** (Collision!)")
+                    elif pd.notna(bye): st.success(f"✅ **Bye Week: {int(float(bye))}** (Clear)")
                             
             render_comparison(data_a, comp_col1)
             render_comparison(data_b, comp_col2)
 
 st.markdown("---")
-
 col1, col2 = st.columns(2)
 with col1:
     st.header("📋 Record a Pick")
     
+    # ==========================================
+    # ⏱️ FEATURE 1: TIMER WITH SOUND EFFECTS 🔊
+    # ==========================================
     clock_key = f"pick_{current_pick}"
     start_time = st.session_state.clock_starts.get(clock_key)
     
@@ -389,13 +362,11 @@ with col1:
         if st.button(f"▶️ Start 90s Clock (Pick {current_pick})", use_container_width=True):
             st.session_state.clock_starts[clock_key] = time.time()
             st.rerun()
-            
         timer_html = f"""
         <div style="font-family:sans-serif; text-align:center; padding:12px; background-color:#1e1e1e; color:white; border-radius:10px; border: 2px solid #2e2e2e; margin-bottom:15px;">
           <div style="font-size:12px; color:#aaa; font-weight:bold; letter-spacing:1px; margin-bottom:5px;">ROUND {round_num} • PICK {current_pick} CLOCK</div>
           <div style="font-size:36px; font-weight:bold; color:#00ff00; line-height:1;">90</div>
-        </div>
-        """
+        </div>"""
         st.components.v1.html(timer_html, height=95, scrolling=False)
     else:
         timer_html = f"""
@@ -409,19 +380,26 @@ with col1:
           var endTime = startTime + duration;
           var clockEl = document.getElementById('clock');
           var timerBox = document.getElementById('timer-box');
+          var tickAudio = new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3');
+          var buzzAudio = new Audio('https://assets.mixkit.co/active_storage/sfx/2955/2955-preview.mp3');
+          var buzzerPlayed = false;
+          var tickPlayed = false;
           
           function update() {{
             var now = new Date().getTime();
             var timeLeft = Math.max(0, Math.ceil((endTime - now) / 1000));
             clockEl.innerText = timeLeft;
-            if (timeLeft <= 15 && timeLeft > 0) {{
+            
+            if (timeLeft <= 10 && timeLeft > 0) {{
               clockEl.style.color = '#ff4b4b';
               timerBox.style.borderColor = '#ff4b4b';
               timerBox.style.boxShadow = '0px 0px 10px rgba(255, 75, 75, 0.5)';
+              if(!tickPlayed) {{ tickAudio.play(); tickPlayed = true; setTimeout(()=>{{tickPlayed=false;}}, 900); }}
             }} else if (timeLeft <= 0) {{
               clockEl.innerText = "TIME OUT 🚨";
               clockEl.style.color = '#ff4b4b';
               timerBox.style.borderColor = '#ff4b4b';
+              if(!buzzerPlayed) {{ buzzAudio.play(); buzzerPlayed = true; }}
             }}
           }}
           update();
@@ -437,7 +415,6 @@ with col1:
         player = st.selectbox("Player drafted", options=dropdown_options, format_func=tag_formatter)
         team_options = [team_name_map[i] for i in range(1, teams + 1)]
         safe_index = min(max(0, int(auto_team_id) - 1), max(0, len(team_options) - 1))
-        
         selected_team_name = st.selectbox(f"Drafting Team (Round {round_num})", options=team_options, index=safe_index, key=f"team_input_{current_pick}")
         team_id = team_options.index(selected_team_name) + 1
 
@@ -522,10 +499,12 @@ active_cols = sum(1 for pos in core_positions if reqs.get(pos, 0) > 0) + (1 if r
 prog_cols = st.columns(max(active_cols, 1))
 col_index = 0
 
+my_needs = [] # Track needs for Algorithmic top 3
 for pos in core_positions:
     req_count = reqs.get(pos, 0)
     if req_count > 0:
         drafted_count = pos_counts.get(pos, 0)
+        if drafted_count < req_count: my_needs.append(pos)
         with prog_cols[col_index]:
             st.write(f"**{pos}** ({min(drafted_count, req_count)}/{req_count})")
             st.progress(min(drafted_count / req_count, 1.0))
@@ -540,43 +519,38 @@ if req_bench > 0:
     with prog_cols[col_index]:
         st.write(f"**BENCH** ({min(bench_overflow, req_bench)}/{req_bench})"); st.progress(min(bench_overflow / req_bench, 1.0) if req_bench > 0 else 1.0)
 
-st.markdown("### 🗓️ Bye-Week Heatmap (My Team)")
-my_team_byes = []
-for p in my_roster_picks:
-    try: my_team_byes.append(int(float(p.get("bye_week", 0))))
-    except: pass
-
-bye_counts = {wk: 0 for wk in range(5, 15)}
-for bw in my_team_byes:
-    if bw in bye_counts: bye_counts[bw] += 1
-
-heat_cols = st.columns(len(bye_counts))
-for i, (wk, count) in enumerate(bye_counts.items()):
-    with heat_cols[i]:
-        st.markdown(f"**Wk {wk}**")
-        if count == 0: st.success(f"{count}")
-        elif count == 1: st.info(f"{count}")
-        elif count == 2: st.warning(f"{count}")
-        else: st.error(f"{count}")
-
+# ==========================================
+# 🧠 FEATURE 3: GURU'S INSTANT ALGORITHMIC TOP 3
+# ==========================================
 st.markdown("---")
-st.header("📊 Live Draft Power Rankings (Projected Standings)")
-if "player_name" in st.session_state.all_players.columns and "projected_points" in st.session_state.all_players.columns:
-    points_map = dict(zip(st.session_state.all_players["player_name"], st.session_state.all_players["projected_points"]))
-    standings_data = []
-    for i in range(1, teams + 1):
-        t_name = team_name_map.get(i, f"Team {i}")
-        t_picks = [p for p in st.session_state.picks if p["team"] == i]
-        t_pts = sum(points_map.get(p["player"], 0) for p in t_picks)
-        standings_data.append({"Team": t_name, "Projected Points": t_pts})
-    standings_df = pd.DataFrame(standings_data).sort_values(by="Projected Points", ascending=False)
+st.header("🧠 Guru's Algorithmic Top 3 Suggestions")
+st.caption("Calculated instantly using VBD math, positional scarcity, and your current roster needs.")
+
+if not available_df.empty:
+    target_df = available_df.copy()
+    if my_needs:
+        # Prioritize core starting needs first
+        target_df = target_df[target_df['position'].isin(my_needs)]
     
-    chart_col, table_col = st.columns([2, 1])
-    with chart_col: st.bar_chart(standings_df.set_index("Team"), use_container_width=True)
-    with table_col: st.dataframe(standings_df, hide_index=True, use_container_width=True)
+    if not target_df.empty:
+        # Formula: Base VBD + (Depletion % * 0.5) to boost scarce positions
+        def calc_guru_score(row):
+            vbd = vbd_map.get(row['player_name'], 0)
+            dep = get_depletion(row['position'])
+            return vbd + (dep * 0.5)
+            
+        target_df['guru_score'] = target_df.apply(calc_guru_score, axis=1)
+        top_3 = target_df.sort_values('guru_score', ascending=False).head(3)
+        
+        t3_cols = st.columns(3)
+        for i, (_, p_row) in enumerate(top_3.iterrows()):
+            with t3_cols[i]:
+                st.success(f"🥇 **{p_row['player_name']}** ({p_row['position']})\n\n**VBD:** +{vbd_map.get(p_row['player_name'],0)}")
+    else:
+        st.info("No players match your immediate starting lineup needs.")
 
 st.markdown("---")
-st.header("🤖 AI Advisor")
+st.header("🤖 AI Advisor (Gemini integration)")
 if st.button("Generate Gemini Prompt"):
     generated_prompt = build_prompt(st.session_state.picks, my_team_id, my_team_name, current_pick, league_config, available_df)
     st.text_area("Copy this prompt into the Gemini Web App:", value=generated_prompt, height=350)
