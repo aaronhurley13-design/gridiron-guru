@@ -137,7 +137,6 @@ if 'team_names' not in st.session_state or type(st.session_state.team_names) is 
 def get_vbd_map(df, teams_count):
     baselines = {}
     positions = ["QB", "RB", "WR", "TE"]
-    # Dynamic thresholds based on league size
     limits = {"QB": teams_count, "RB": teams_count * 2, "WR": teams_count * 2, "TE": teams_count}
     
     for pos in positions:
@@ -160,7 +159,7 @@ def get_vbd_map(df, teams_count):
 
 title_col, image_col = st.columns([2, 1])
 with title_col: st.title("Gridiron Guru")
-with image_col: st.image("logo.png", width=150)
+with image_col: st.image("IMG_0106.png", width=300)
 
 with st.sidebar:
     st.header("⚙️ Settings & Imports")
@@ -225,7 +224,6 @@ auto_team_id = (teams - pick_in_round + 1) if (draft_type == "Snake" and round_n
 st.session_state.queue = [p for p in st.session_state.queue if p not in drafted_names]
 available_df = st.session_state.all_players[~st.session_state.all_players["player_name"].isin(drafted_names)] if "player_name" in st.session_state.all_players.columns else pd.DataFrame()
 
-# Generate calculated VBD maps
 vbd_map = get_vbd_map(st.session_state.all_players, teams)
 
 def tag_formatter(player_name):
@@ -326,7 +324,7 @@ with col1:
         orig_rank = int(matched["rank"].values[0]) if not matched.empty and "rank" in matched.columns else current_pick
 
         # ==========================================
- * # 🚨 FEATURE 1: VALUE & REACH ANALYZER
+        # 🚨 FEATURE 1: VALUE & REACH ANALYZER
         # ==========================================
         pick_diff = current_pick - orig_rank
         valuation = "Standard"
@@ -384,7 +382,6 @@ with col2:
             p_round = (p["pick"] - 1) // teams
             p_team_name = team_name_map.get(p["team"])
             
-            # Show valuation directly inside the cell grid!
             badge = "🔥 " if p.get("analysis") == "🔥 Value Pick" else ("🎈 " if p.get("analysis") == "🎈 Reach" else "")
             if p_round < total_rounds and p_team_name in matrix_grid:
                 matrix_grid[p_team_name][p_round] = f"{badge}{p['player']} ({p['position']})"
