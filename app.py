@@ -233,7 +233,7 @@ def tag_formatter(player_name):
     return f"{player_name} [{vbd_text}] ({tag})" if tag else f"{player_name} [{vbd_text}]"
 
 # ==========================================
-# 🚨 FEATURE 2: LIVE OPPONENT NEEDS MATRIX
+# 👀 UPCOMING TEAM NEEDS MATRIX
 # ==========================================
 st.markdown("---")
 col_needs, col_alerts = st.columns(2)
@@ -277,7 +277,6 @@ with col_alerts:
                 next_player = pos_avail.iloc[1]
                 diff = top_player["projected_points"] - next_player["projected_points"]
                 
-                # If there's a 12+ point drop between the best and next best available...
                 if diff >= 12:
                     alerts.append(f"**{pos} Cliff:** {top_player['player_name']} is the last in their tier! Next up is {next_player['player_name']} (a drop of {int(diff)} proj. pts).")
         
@@ -334,6 +333,70 @@ st.markdown("---")
 col1, col2 = st.columns(2)
 with col1:
     st.header("📋 Record a Pick")
+    
+    # ==========================================
+    # ⏱️ SMART PICK TIMER COMPONENT
+    # ==========================================
+    timer_html = f"""
+    <div id="timer-box" style="font-family:sans-serif; text-align:center; padding:12px; background-color:#1e1e1e; color:white; border-radius:10px; border: 2px solid #2e2e2e; margin-bottom:15px; display: flex; flex-direction: column; align-items: center;">
+      <div style="font-size:12px; color:#aaa; font-weight:bold; letter-spacing:1px; margin-bottom:5px;">ROUND {round_num} • PICK {current_pick} CLOCK</div>
+      <div id="clock" style="font-size:36px; font-weight:bold; color:#00ff00; line-height:1; margin-bottom: 10px;">90</div>
+      <button id="start-btn" style="background-color:#ff4b4b; color:white; border:none; padding:8px 16px; border-radius:5px; font-weight:bold; cursor:pointer;">▶️ Start Clock</button>
+    </div>
+    <script>
+      const currentPick = {current_pick};
+      const clockEl = document.getElementById('clock');
+      const startBtn = document.getElementById('start-btn');
+      const timerBox = document.getElementById('timer-box');
+      
+      let endTime = sessionStorage.getItem('pickEndTime_' + currentPick);
+      let timerInterval;
+
+      function updateClock() {{
+        if (!endTime) return;
+        let now = new Date().getTime();
+        let timeLeft = Math.max(0, Math.ceil((endTime - now) / 1000));
+        
+        clockEl.innerText = timeLeft;
+        
+        if (timeLeft <= 15) {{
+          clockEl.style.color = '#ff4b4b';
+          timerBox.style.borderColor = '#ff4b4b';
+          timerBox.style.boxShadow = '0px 0px 10px rgba(255, 75, 75, 0.5)';
+        }} else {{
+          clockEl.style.color = '#00ff00';
+          timerBox.style.borderColor = '#2e2e2e';
+          timerBox.style.boxShadow = 'none';
+        }}
+        
+        if (timeLeft <= 0) {{
+          clearInterval(timerInterval);
+          clockEl.innerText = "TIME OUT 🚨";
+          startBtn.style.display = 'none';
+        }}
+      }}
+
+      function startTimer() {{
+        let now = new Date().getTime();
+        endTime = now + (90 * 1000); 
+        sessionStorage.setItem('pickEndTime_' + currentPick, endTime);
+        startBtn.style.display = 'none';
+        timerInterval = setInterval(updateClock, 1000);
+        updateClock();
+      }}
+
+      if (endTime) {{
+        startBtn.style.display = 'none';
+        timerInterval = setInterval(updateClock, 1000);
+        updateClock();
+      }} else {{
+        clockEl.innerText = "90";
+        startBtn.addEventListener('click', startTimer);
+      }}
+    </script>
+    """
+    st.components.v1.html(timer_html, height=145, scrolling=False)
+
     if not available_df.empty:
         all_available_names = [str(x) for x in available_df["player_name"].tolist() if pd.notna(x) and str(x).strip() != ""]
         dropdown_options = st.session_state.queue + [p for p in all_available_names if p not in st.session_state.queue]
@@ -351,7 +414,7 @@ with col1:
         orig_rank = int(matched["rank"].values[0]) if not matched.empty and "rank" in matched.columns else current_pick
 
         # ==========================================
-        # 🚨 FEATURE 1: VALUE & REACH ANALYZER
+        # 🚨 VALUE & REACH ANALYZER
         # ==========================================
         pick_diff = current_pick - orig_rank
         valuation = "Standard"
@@ -462,29 +525,42 @@ if req_bench > 0:
 st.markdown("### 🗓️ Bye-Week Heatmap (My Team)")
 my_team_byes = []
 for p in my_roster_picks:
-    try:
-        my_team_byes.append(int(float(p.get("bye_week", 0))))
-    except:
-        pass
+    try: my_team_byes.append(int(float(p.get("bye_week", 0))))
+    except: pass
 
-# NFL Bye weeks typically range from Week 5 to 14
 bye_counts = {wk: 0 for wk in range(5, 15)}
 for bw in my_team_byes:
-    if bw in bye_counts:
-        bye_counts[bw] += 1
+    if bw in bye_counts: bye_counts[bw] += 1
 
 heat_cols = st.columns(len(bye_counts))
 for i, (wk, count) in enumerate(bye_counts.items()):
     with heat_cols[i]:
         st.markdown(f"**Wk {wk}**")
-        if count == 0:
-            st.success(f"{count}")
-        elif count == 1:
-            st.info(f"{count}")
-        elif count == 2:
-            st.warning(f"{count}")
-        else:
-            st.error(f"{count}") # 3 or more players on bye is a huge danger zone!
+        if count == 0: st.success(f"{count}")
+        elif count == 1: st.info(f"{count}")
+        elif count == 2: st.warning(f"{count}")
+        else: st.error(f"{count}")
+
+# ==========================================
+# 📊 FEATURE 1: LIVE DRAFT POWER RANKINGS
+# ==========================================
+st.markdown("---")
+st.header("📊 Live Draft Power Rankings (Projected Standings)")
+if "player_name" in st.session_state.all_players.columns and "projected_points" in st.session_state.all_players.columns:
+    points_map = dict(zip(st.session_state.all_players["player_name"], st.session_state.all_players["projected_points"]))
+    standings_data = []
+    for i in range(1, teams + 1):
+        t_name = team_name_map.get(i, f"Team {i}")
+        t_picks = [p for p in st.session_state.picks if p["team"] == i]
+        t_pts = sum(points_map.get(p["player"], 0) for p in t_picks)
+        standings_data.append({"Team": t_name, "Projected Points": t_pts})
+    standings_df = pd.DataFrame(standings_data).sort_values(by="Projected Points", ascending=False)
+    
+    chart_col, table_col = st.columns([2, 1])
+    with chart_col:
+        st.bar_chart(standings_df.set_index("Team"), use_container_width=True)
+    with table_col:
+        st.dataframe(standings_df, hide_index=True, use_container_width=True)
 
 st.markdown("---")
 st.header("🤖 AI Advisor")
