@@ -87,7 +87,7 @@ with image_col: st.image("https://neon-factory.com/cdn/shop/products/helmet-512-
 
 with st.sidebar:
     st.header("⚙️ Settings & Imports")
-    uploaded_csv = st.file_uploader("Upload temporary rankings (.csv)", type=["csv"])
+    uploaded_csv = st.file_uploader("Upload temporary rankings (.csv), Not Required", type=["csv"])
     if uploaded_csv is not None:
         try:
             temp_df = pd.read_csv(uploaded_csv)
