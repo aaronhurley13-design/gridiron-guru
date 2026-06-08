@@ -100,7 +100,7 @@ if 'team_names' not in st.session_state or type(st.session_state.team_names) is 
 
 title_col, image_col = st.columns([2, 1])
 with title_col: st.title("Gridiron Guru")
-with image_col: st.image("https://neon-factory.com/cdn/shop/products/helmet-512-American_-football_-football-club_-helmet_-safety_-soccer_-sport_eecf343f-8f31-4c95-adde-61901ee87fea_1024x1024@2x.png?v=1575240399", width=150)
+with image_col: st.image("Screenshot_2026-06-08_at_7.40.39_AM-removebg-preview.png", width=150) # Updated line!
 
 with st.sidebar:
     st.header("⚙️ Settings & Imports")
