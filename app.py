@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import json, io, os
@@ -51,7 +50,7 @@ def parse_gemini_response(text):
 
 if 'all_players' not in st.session_state: st.session_state.all_players = load_initial_player_pool()
 if 'picks' not in st.session_state: st.session_state.picks = []
-if 'queue' not in st.session_state: st.session_state.queue = []
+if 'queue' not in st.session_state: st.session_state.queue = [] 
 if 'kicker_scoring' not in st.session_state: st.session_state.kicker_scoring = pd.DataFrame([{"Range": "0-39 yds", "Points": 3}, {"Range": "40-49 yds", "Points": 4}, {"Range": "50+ yds", "Points": 5}, {"Range": "PAT", "Points": 1}])
 if 'defense_scoring' not in st.session_state: st.session_state.defense_scoring = pd.DataFrame([{"Stat": "Turnover", "Points": 2}, {"Stat": "Sack", "Points": 1}, {"Stat": "Safety", "Points": 2}])
 if 'roster_spots' not in st.session_state: st.session_state.roster_spots = pd.DataFrame([{"Position": "QB", "Count": 1}, {"Position": "RB", "Count": 2}, {"Position": "WR", "Count": 2}, {"Position": "TE", "Count": 1}, {"Position": "FLEX", "Count": 1}, {"Position": "K", "Count": 1}, {"Position": "DST", "Count": 1}, {"Position": "Bench", "Count": 6}])
@@ -88,7 +87,7 @@ with st.sidebar:
 
     teams = st.number_input("Number of teams", min_value=8, max_value=16, value=12)
     my_team_id = st.number_input("My Team Number", min_value=1, max_value=teams, value=1)
-
+    
     st.markdown("### 🏷️ Custom Team Names")
     edited_teams = st.data_editor(st.session_state.team_names.head(teams), hide_index=True, use_container_width=True)
     team_name_map = dict(zip(edited_teams["ID"], edited_teams["Team Name"]))
@@ -99,7 +98,7 @@ with st.sidebar:
     ppr = st.slider("PPR value", 0.0, 1.0, 1.0, 0.5)
     pass_td = st.number_input("Pass TD Points", value=4)
     rush_td = st.number_input("Rush/Rec TD Points", value=6)
-
+    
     st.markdown("### 🏈 Roster Size")
     edited_roster = st.data_editor(st.session_state.roster_spots, num_rows="dynamic", use_container_width=True)
     st.markdown("### 🦵 Kicker")
@@ -130,19 +129,18 @@ st.markdown("---")
 st.header("🎯 Draft Queue")
 if not available_df.empty:
     queue_filter = st.radio("Filter Queue by Position:", ["ALL", "QB", "RB", "WR", "TE", "K", "DST"], horizontal=True)
-
+    
     if queue_filter == "ALL":
         filtered_names = available_df["player_name"].tolist()
     else:
         filtered_names = available_df[available_df['position'].str.contains(queue_filter, case=False, na=False)]["player_name"].tolist()
-
-    # 🚨 THE FIX: Scrub out any NaN or blank values before sorting
+    
     safe_options = list(set(filtered_names + st.session_state.queue))
     safe_options = [str(x) for x in safe_options if pd.notna(x) and str(x).strip() != ""]
     safe_options.sort()
-
+    
     st.session_state.queue = st.multiselect("Search and pin players to your Watchlist:", options=safe_options, default=st.session_state.queue)
-
+    
     if st.session_state.queue:
         cols = st.columns(min(len(st.session_state.queue), 4))
         for i, q_player in enumerate(st.session_state.queue):
@@ -153,14 +151,13 @@ col1, col2 = st.columns(2)
 with col1:
     st.header("📋 Record a Pick")
     if not available_df.empty:
-        # Scrub the main dropdown list as well just to be totally safe!
         all_available_names = [str(x) for x in available_df["player_name"].tolist() if pd.notna(x) and str(x).strip() != ""]
         dropdown_options = st.session_state.queue + [p for p in all_available_names if p not in st.session_state.queue]
-
+        
         player = st.selectbox("Player drafted", options=dropdown_options)
         team_options = [team_name_map[i] for i in range(1, teams + 1)]
         safe_index = min(max(0, int(auto_team_id) - 1), max(0, len(team_options) - 1))
-
+        
         selected_team_name = st.selectbox(f"Drafting Team (Round {round_num})", options=team_options, index=safe_index, key=f"team_input_{current_pick}")
         team_id = team_options.index(selected_team_name) + 1
 
@@ -191,6 +188,11 @@ with col2:
         if "bye_week" in display_df.columns: display_df = display_df.drop(columns=["bye_week", "team"])
         display_df = display_df.rename(columns={"pick": "Pick", "team_name": "Team", "player": "Player", "position": "Position"})
         st.dataframe(display_df, use_container_width=True)
+        
+        # 📥 NEW FEATURE: Download complete draft history as a CSV
+        csv_buffer = io.StringIO()
+        display_df.to_csv(csv_buffer, index=False)
+        st.download_button(label="📥 Export Draft Results (CSV)", data=csv_buffer.getvalue(), file_name="draft_results.csv", mime="text/csv")
     else: st.info("No picks yet")
 
 st.markdown("---")
@@ -253,15 +255,3 @@ if st.button("Process AI Recommendation"):
             st.write(f"**Reasoning:** {parsed_data.get('reasoning')}")
         else: st.error("Could not parse valid JSON. Copy the ENTIRE prompt and response.")
     else: st.warning("Please paste the response into the box first!")
-
-
-%%bash
-mkdir -p .streamlit
-cat <<EOF > .streamlit/config.toml
-[theme]
-primaryColor = "#00FFFF" 
-backgroundColor = "#0E1117"
-secondaryBackgroundColor = "#1E2530"
-textColor = "#FFFFFF"
-font = "sans serif"
-EOF
