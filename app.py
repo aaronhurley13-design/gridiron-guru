@@ -334,6 +334,9 @@ col1, col2 = st.columns(2)
 with col1:
     st.header("📋 Record a Pick")
     
+        # ==========================================
+    # ⏱️ SMART PICK TIMER COMPONENT
+    # ==========================================
     timer_html = f"""
     <div id="timer-box" style="font-family:sans-serif; text-align:center; padding:12px; background-color:#1e1e1e; color:white; border-radius:10px; border: 2px solid #2e2e2e; margin-bottom:15px; display: flex; flex-direction: column; align-items: center;">
       <div style="font-size:12px; color:#aaa; font-weight:bold; letter-spacing:1px; margin-bottom:5px;">ROUND {round_num} • PICK {current_pick} CLOCK</div>
@@ -392,7 +395,8 @@ with col1:
       }}
     </script>
     """
-    st.components.v1.html(timer_html, height=145, scrolling=False)
+    # ADDING THE UNIQUE KEY HERE FORCES STREAMLIT TO DESTROY/REBUILD ON EVERY PICK
+    st.components.v1.html(timer_html, height=145, scrolling=False, key=f"timer_component_{current_pick}")
 
     if not available_df.empty:
         all_available_names = [str(x) for x in available_df["player_name"].tolist() if pd.notna(x) and str(x).strip() != ""]
