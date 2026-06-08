@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import json, io, os, time
 
-st.set_page_config(page_title="Gridiron Guru", page_icon="🏈", layout="wide")
+st.set_page_config(page_title="Gridiron Guru", page_icon="IMG_0106.png", layout="wide")
 
 # ==========================================
 # CSS HACK: MAKE MOBILE SIDEBAR VISIBLE 📱
