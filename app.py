@@ -333,74 +333,74 @@ st.markdown("---")
 col1, col2 = st.columns(2)
 with col1:
     st.header("📋 Record a pick")
-        # ==========================================
+    # ==========================================
     # ⏱️ SMART PICK TIMER COMPONENT
     # ==========================================
     timer_html = f"""
-    <div id="timer-box-{current_pick}" style="font-family:sans-serif; text-align:center; padding:12px; background-color:#1e1e1e; color:white; border-radius:10px; border: 2px solid #2e2e2e; margin-bottom:15px; display: flex; flex-direction: column; align-items: center;">
+    <div id="timer-box" style="font-family:sans-serif; text-align:center; padding:12px; background-color:#1e1e1e; color:white; border-radius:10px; border: 2px solid #2e2e2e; margin-bottom:15px; display: flex; flex-direction: column; align-items: center;">
       <div style="font-size:12px; color:#aaa; font-weight:bold; letter-spacing:1px; margin-bottom:5px;">ROUND {round_num} • PICK {current_pick} CLOCK</div>
-      <div id="clock-{current_pick}" style="font-size:36px; font-weight:bold; color:#00ff00; line-height:1; margin-bottom: 10px;">90</div>
-      <button id="start-btn-{current_pick}" style="background-color:#ff4b4b; color:white; border:none; padding:8px 16px; border-radius:5px; font-weight:bold; cursor:pointer;">▶️ Start Clock</button>
+      <div id="clock" style="font-size:36px; font-weight:bold; color:#00ff00; line-height:1; margin-bottom: 10px;">90</div>
+      <button id="start-btn" onclick="startTimer_{current_pick}()" style="background-color:#ff4b4b; color:white; border:none; padding:8px 16px; border-radius:5px; font-weight:bold; cursor:pointer; display:block;">▶️ Start Clock</button>
     </div>
     <script>
-      (function() {{
-          const currentPick = {current_pick};
-          const clockEl = document.getElementById('clock-' + currentPick);
-          const startBtn = document.getElementById('start-btn-' + currentPick);
-          const timerBox = document.getElementById('timer-box-' + currentPick);
-          
-          let endTime = sessionStorage.getItem('pickEndTime_' + currentPick);
-          let timerInterval;
+      // Cache buster pick identifier: {current_pick}
+      var currentPick = {current_pick};
+      var timerInterval;
+      var endTime = sessionStorage.getItem('pickEndTime_' + currentPick);
 
-          function updateClock() {{
-            if (!endTime) return;
-            let now = new Date().getTime();
-            let timeLeft = Math.max(0, Math.ceil((endTime - now) / 1000));
-            
-            if (!clockEl) return;
-            clockEl.innerText = timeLeft;
-            
-            if (timeLeft <= 15) {{
-              clockEl.style.color = '#ff4b4b';
-              timerBox.style.borderColor = '#ff4b4b';
-              timerBox.style.boxShadow = '0px 0px 10px rgba(255, 75, 75, 0.5)';
-            }} else {{
-              clockEl.style.color = '#00ff00';
-              timerBox.style.borderColor = '#2e2e2e';
-              timerBox.style.boxShadow = 'none';
-            }}
-            
-            if (timeLeft <= 0) {{
-              clearInterval(timerInterval);
-              clockEl.innerText = "TIME OUT 🚨";
-              if (startBtn) startBtn.style.display = 'none';
-            }}
-          }}
+      function updateClock_{current_pick}() {{
+        var clockEl = document.getElementById('clock');
+        var timerBox = document.getElementById('timer-box');
+        var startBtn = document.getElementById('start-btn');
+        
+        if (!clockEl || !timerBox) return;
+        
+        var now = new Date().getTime();
+        var timeLeft = Math.max(0, Math.ceil((endTime - now) / 1000));
+        
+        clockEl.innerText = timeLeft;
+        
+        if (timeLeft <= 15) {{
+          clockEl.style.color = '#ff4b4b';
+          timerBox.style.borderColor = '#ff4b4b';
+          timerBox.style.boxShadow = '0px 0px 10px rgba(255, 75, 75, 0.5)';
+        }} else {{
+          clockEl.style.color = '#00ff00';
+          timerBox.style.borderColor = '#2e2e2e';
+          timerBox.style.boxShadow = 'none';
+        }}
+        
+        if (timeLeft <= 0) {{
+          clearInterval(timerInterval);
+          clockEl.innerText = "TIME OUT 🚨";
+          if (startBtn) startBtn.style.display = 'none';
+        }}
+      }}
 
-          function startTimer() {{
-            let now = new Date().getTime();
-            endTime = now + (90 * 1000); 
-            sessionStorage.setItem('pickEndTime_' + currentPick, endTime);
-            if (startBtn) startBtn.style.display = 'none';
-            timerInterval = setInterval(updateClock, 1000);
-            updateClock();
-          }}
+      function startTimer_{current_pick}() {{
+        var now = new Date().getTime();
+        endTime = now + (90 * 1000); 
+        sessionStorage.setItem('pickEndTime_' + currentPick, endTime);
+        var startBtn = document.getElementById('start-btn');
+        if (startBtn) startBtn.style.display = 'none';
+        timerInterval = setInterval(updateClock_{current_pick}, 1000);
+        updateClock_{current_pick}();
+      }}
 
-          if (endTime) {{
-            if (startBtn) startBtn.style.display = 'none';
-            timerInterval = setInterval(updateClock, 1000);
-            updateClock();
-          }} else {{
-            if (clockEl) clockEl.innerText = "90";
-            if (startBtn) {{
-                startBtn.style.display = 'block';
-                startBtn.onclick = startTimer;
-            }}
-          }}
-      }})();
+      // Immediate evaluation on load
+      if (endTime) {{
+        var startBtn = document.getElementById('start-btn');
+        if (startBtn) startBtn.style.display = 'none';
+        timerInterval = setInterval(updateClock_{current_pick}, 1000);
+        updateClock_{current_pick}();
+      }} else {{
+        document.getElementById('clock').innerText = "90";
+        document.getElementById('start-btn').style.display = 'block';
+      }}
     </script>
     """
     st.components.v1.html(timer_html, height=145, scrolling=False)
+
 
     if not available_df.empty:
         all_available_names = [str(x) for x in available_df["player_name"].tolist() if pd.notna(x) and str(x).strip() != ""]
