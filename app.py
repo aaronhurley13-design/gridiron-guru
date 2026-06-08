@@ -121,7 +121,6 @@ if 'player_tags' not in st.session_state:
 if 'team_names' not in st.session_state or type(st.session_state.team_names) is not pd.DataFrame or "ID" not in st.session_state.team_names.columns:
     st.session_state.team_names = pd.DataFrame([{"ID": i, "Team Name": f"Team {i}"} for i in range(1, 17)])
 
-# Tracks the exact start time for every pick to fix Safari bugs
 if 'clock_starts' not in st.session_state:
     st.session_state.clock_starts = {}
 
@@ -146,7 +145,7 @@ def get_vbd_map(df, teams_count):
 
 title_col, image_col = st.columns([2, 1])
 with title_col: st.title("Gridiron Guru")
-with image_col: st.image("IMG_0106.png", width=300)
+with image_col: st.image("logo.png", width=150)
 
 with st.sidebar:
     st.header("⚙️ Settings & Imports")
@@ -227,6 +226,13 @@ st.markdown("---")
 st.header("⚔️ Draft War Room")
 war_col1, war_col2, war_col3 = st.columns(3)
 
+def get_depletion(pos):
+    req_per_team = sum([int(r["Count"]) for _, r in st.session_state.roster_spots.iterrows() if r["Position"].upper() == pos])
+    if req_per_team == 0: req_per_team = 1
+    total_expected = req_per_team * teams
+    drafted_count = sum(1 for dp in st.session_state.picks if dp["position"] == pos)
+    return min((drafted_count / total_expected) * 100, 100) if total_expected > 0 else 0
+
 with war_col1:
     st.subheader("🎯 Massive Steal Alerts")
     steals_found = False
@@ -242,12 +248,8 @@ with war_col2:
     st.subheader("📉 Positional Scarcity")
     core_pos = ["QB", "RB", "WR", "TE"]
     for p in core_pos:
-        req_per_team = sum([int(r["Count"]) for _, r in st.session_state.roster_spots.iterrows() if r["Position"].upper() == p])
-        if req_per_team == 0: req_per_team = 1
-        total_expected = req_per_team * teams
-        drafted_count = sum(1 for dp in st.session_state.picks if dp["position"] == p)
-        depletion = min((drafted_count / total_expected) * 100, 100) if total_expected > 0 else 0
-        st.caption(f"**{p}** ({drafted_count}/{total_expected} expected starters drafted)")
+        depletion = get_depletion(p)
+        st.caption(f"**{p}** ({int(depletion)}% depleted)")
         st.progress(depletion / 100.0)
 
 with war_col3:
@@ -327,15 +329,59 @@ if not available_df.empty:
                 st.success(f"Updated tag for {target_player}!")
                 st.rerun()
 
+# ==========================================
+# ⚖️ HEAD-TO-HEAD PLAYER COMPARISON
+# ==========================================
+st.markdown("---")
+with st.expander("⚖️ Head-to-Head Player Comparison", expanded=False):
+    comp_col1, comp_col2 = st.columns(2)
+    
+    if not available_df.empty:
+        all_avail_sorted = sorted([str(x) for x in available_df["player_name"].tolist() if pd.notna(x) and str(x).strip() != ""])
+        
+        with comp_col1:
+            player_a = st.selectbox("Player A", options=["-- Select Player --"] + all_avail_sorted, index=0)
+        with comp_col2:
+            player_b = st.selectbox("Player B", options=["-- Select Player --"] + all_avail_sorted, index=0)
+            
+        if player_a != "-- Select Player --" and player_b != "-- Select Player --":
+            data_a = st.session_state.all_players[st.session_state.all_players["player_name"] == player_a].iloc[0]
+            data_b = st.session_state.all_players[st.session_state.all_players["player_name"] == player_b].iloc[0]
+            
+            # Calculate current team byes for collision check
+            my_current_roster = [p for p in st.session_state.picks if p["team"] == my_team_id]
+            my_byes = [int(float(p.get("bye_week", 0))) for p in my_current_roster if pd.notna(p.get("bye_week"))]
+            
+            def render_comparison(data_row, col):
+                name = data_row["player_name"]
+                pos = data_row.get("position", "N/A")
+                pts = data_row.get("projected_points", 0)
+                vbd = vbd_map.get(name, 0)
+                bye = data_row.get("bye week", "N/A")
+                depletion = get_depletion(pos)
+                
+                with col:
+                    st.markdown(f"### {name} ({pos})")
+                    st.metric("Projected Points", f"{pts} pts")
+                    st.metric("VBD Score", f"+{vbd}" if vbd > 0 else f"{vbd}")
+                    st.metric(f"{pos} Position Scarcity", f"{int(depletion)}% Depleted")
+                    
+                    if pd.notna(bye):
+                        bye_int = int(float(bye))
+                        if bye_int in my_byes:
+                            st.error(f"🚨 **Bye Week: {bye_int}** (Collision with current roster!)")
+                        else:
+                            st.success(f"✅ **Bye Week: {bye_int}** (Clear)")
+                            
+            render_comparison(data_a, comp_col1)
+            render_comparison(data_b, comp_col2)
+
 st.markdown("---")
 
 col1, col2 = st.columns(2)
 with col1:
     st.header("📋 Record a Pick")
     
-    # ==========================================
-    # ⏱️ NATIVE STREAMLIT PICK TIMER
-    # ==========================================
     clock_key = f"pick_{current_pick}"
     start_time = st.session_state.clock_starts.get(clock_key)
     
