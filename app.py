@@ -1,7 +1,7 @@
 
 import streamlit as st
 import pandas as pd
-import json, io, os
+import json, io, os, time
 
 st.set_page_config(page_title="Gridiron Guru", page_icon="🏈", layout="wide")
 
@@ -121,6 +121,10 @@ if 'player_tags' not in st.session_state:
 if 'team_names' not in st.session_state or type(st.session_state.team_names) is not pd.DataFrame or "ID" not in st.session_state.team_names.columns:
     st.session_state.team_names = pd.DataFrame([{"ID": i, "Team Name": f"Team {i}"} for i in range(1, 17)])
 
+# Tracks the exact start time for every pick to fix Safari bugs
+if 'clock_starts' not in st.session_state:
+    st.session_state.clock_starts = {}
+
 def get_vbd_map(df, teams_count):
     baselines = {}
     positions = ["QB", "RB", "WR", "TE"]
@@ -142,7 +146,7 @@ def get_vbd_map(df, teams_count):
 
 title_col, image_col = st.columns([2, 1])
 with title_col: st.title("Gridiron Guru")
-with image_col: st.image("IMG_0106.png", width=300)
+with image_col: st.image("logo.png", width=150)
 
 with st.sidebar:
     st.header("⚙️ Settings & Imports")
@@ -196,6 +200,7 @@ with st.sidebar:
         st.session_state.picks, st.session_state.queue = [], []
         st.session_state.all_players = load_initial_player_pool()
         st.session_state.player_tags = {"Christian McCaffrey": "⭐ Target", "Breece Hall": "⭐ Target", "CeeDee Lamb": "⭐ Target", "Puka Nacua": "🟢 Sleeper", "Kyren Williams": "🟢 Sleeper", "Garrett Wilson": "🟢 Sleeper"}
+        st.session_state.clock_starts = {}
         st.rerun()
 
 current_pick = len(st.session_state.picks) + 1
@@ -231,8 +236,7 @@ with war_col1:
             if slide >= 12:
                 st.success(f"🚨 **{row['player_name']}** ({row['position']})\nSlid **{int(slide)}** spots past rank!")
                 steals_found = True
-    if not steals_found:
-        st.info("No major ADP sliders detected right now.")
+    if not steals_found: st.info("No major ADP sliders detected right now.")
 
 with war_col2:
     st.subheader("📉 Positional Scarcity")
@@ -256,12 +260,10 @@ with war_col3:
                 top_player = pos_avail.iloc[0]
                 next_player = pos_avail.iloc[1]
                 diff = top_player["projected_points"] - next_player["projected_points"]
-                if diff >= 12:
-                    alerts.append(f"**{pos} Cliff:** {top_player['player_name']} is the last in their tier! (Drop of {int(diff)} pts to {next_player['player_name']}).")
+                if diff >= 12: alerts.append(f"**{pos} Cliff:** {top_player['player_name']} is the last in their tier! (Drop of {int(diff)} pts to {next_player['player_name']}).")
         if alerts:
             for alert in alerts: st.error(alert)
-        else:
-            st.info("Board is stable. No positional point cliffs detected.")
+        else: st.info("Board is stable. No positional point cliffs detected.")
 
 # ==========================================
 # 👀 UPCOMING TEAM NEEDS MATRIX
@@ -274,8 +276,7 @@ for future_pick_offset in range(4):
     f_round = (f_pick - 1) // teams + 1
     f_p_in_round = (f_pick - 1) % teams + 1
     f_team_id = (teams - f_p_in_round + 1) if (draft_type == "Snake" and f_round % 2 == 0) else f_p_in_round
-    if f_team_id not in upcoming_picks_teams:
-        upcoming_picks_teams.append(f_team_id)
+    if f_team_id not in upcoming_picks_teams: upcoming_picks_teams.append(f_team_id)
 
 needs_cols = st.columns(len(upcoming_picks_teams))
 for idx, t_id in enumerate(upcoming_picks_teams):
@@ -286,10 +287,8 @@ for idx, t_id in enumerate(upcoming_picks_teams):
     with needs_cols[idx]:
         is_me = " (YOU)" if t_id == my_team_id else ""
         st.markdown(f"**📢 {t_name}{is_me}**")
-        if t_positions:
-            st.caption(f"Filled: {', '.join(t_positions)}")
-        else:
-            st.caption("No players rostered yet.")
+        if t_positions: st.caption(f"Filled: {', '.join(t_positions)}")
+        else: st.caption("No players rostered yet.")
 
 # ==========================================
 # DRAFT QUEUE WITH POSITION FILTER & TAGS 🎯
@@ -332,75 +331,58 @@ st.markdown("---")
 
 col1, col2 = st.columns(2)
 with col1:
-    st.header("📋 Record a pick")
+    st.header("📋 Record a Pick")
+    
     # ==========================================
-    # ⏱️ SMART PICK TIMER COMPONENT
+    # ⏱️ NATIVE STREAMLIT PICK TIMER
     # ==========================================
-    timer_html = f"""
-    <div id="timer-box" style="font-family:sans-serif; text-align:center; padding:12px; background-color:#1e1e1e; color:white; border-radius:10px; border: 2px solid #2e2e2e; margin-bottom:15px; display: flex; flex-direction: column; align-items: center;">
-      <div style="font-size:12px; color:#aaa; font-weight:bold; letter-spacing:1px; margin-bottom:5px;">ROUND {round_num} • PICK {current_pick} CLOCK</div>
-      <div id="clock" style="font-size:36px; font-weight:bold; color:#00ff00; line-height:1; margin-bottom: 10px;">90</div>
-      <button id="start-btn" onclick="startTimer_{current_pick}()" style="background-color:#ff4b4b; color:white; border:none; padding:8px 16px; border-radius:5px; font-weight:bold; cursor:pointer; display:block;">▶️ Start Clock</button>
-    </div>
-    <script>
-      // Cache buster pick identifier: {current_pick}
-      var currentPick = {current_pick};
-      var timerInterval;
-      var endTime = sessionStorage.getItem('pickEndTime_' + currentPick);
-
-      function updateClock_{current_pick}() {{
-        var clockEl = document.getElementById('clock');
-        var timerBox = document.getElementById('timer-box');
-        var startBtn = document.getElementById('start-btn');
-        
-        if (!clockEl || !timerBox) return;
-        
-        var now = new Date().getTime();
-        var timeLeft = Math.max(0, Math.ceil((endTime - now) / 1000));
-        
-        clockEl.innerText = timeLeft;
-        
-        if (timeLeft <= 15) {{
-          clockEl.style.color = '#ff4b4b';
-          timerBox.style.borderColor = '#ff4b4b';
-          timerBox.style.boxShadow = '0px 0px 10px rgba(255, 75, 75, 0.5)';
-        }} else {{
-          clockEl.style.color = '#00ff00';
-          timerBox.style.borderColor = '#2e2e2e';
-          timerBox.style.boxShadow = 'none';
-        }}
-        
-        if (timeLeft <= 0) {{
-          clearInterval(timerInterval);
-          clockEl.innerText = "TIME OUT 🚨";
-          if (startBtn) startBtn.style.display = 'none';
-        }}
-      }}
-
-      function startTimer_{current_pick}() {{
-        var now = new Date().getTime();
-        endTime = now + (90 * 1000); 
-        sessionStorage.setItem('pickEndTime_' + currentPick, endTime);
-        var startBtn = document.getElementById('start-btn');
-        if (startBtn) startBtn.style.display = 'none';
-        timerInterval = setInterval(updateClock_{current_pick}, 1000);
-        updateClock_{current_pick}();
-      }}
-
-      // Immediate evaluation on load
-      if (endTime) {{
-        var startBtn = document.getElementById('start-btn');
-        if (startBtn) startBtn.style.display = 'none';
-        timerInterval = setInterval(updateClock_{current_pick}, 1000);
-        updateClock_{current_pick}();
-      }} else {{
-        document.getElementById('clock').innerText = "90";
-        document.getElementById('start-btn').style.display = 'block';
-      }}
-    </script>
-    """
-    st.components.v1.html(timer_html, height=145, scrolling=False)
-
+    clock_key = f"pick_{current_pick}"
+    start_time = st.session_state.clock_starts.get(clock_key)
+    
+    if start_time is None:
+        if st.button(f"▶️ Start 90s Clock (Pick {current_pick})", use_container_width=True):
+            st.session_state.clock_starts[clock_key] = time.time()
+            st.rerun()
+            
+        timer_html = f"""
+        <div style="font-family:sans-serif; text-align:center; padding:12px; background-color:#1e1e1e; color:white; border-radius:10px; border: 2px solid #2e2e2e; margin-bottom:15px;">
+          <div style="font-size:12px; color:#aaa; font-weight:bold; letter-spacing:1px; margin-bottom:5px;">ROUND {round_num} • PICK {current_pick} CLOCK</div>
+          <div style="font-size:36px; font-weight:bold; color:#00ff00; line-height:1;">90</div>
+        </div>
+        """
+        st.components.v1.html(timer_html, height=95, scrolling=False)
+    else:
+        timer_html = f"""
+        <div id="timer-box" style="font-family:sans-serif; text-align:center; padding:12px; background-color:#1e1e1e; color:white; border-radius:10px; border: 2px solid #2e2e2e; margin-bottom:15px;">
+          <div style="font-size:12px; color:#aaa; font-weight:bold; letter-spacing:1px; margin-bottom:5px;">ROUND {round_num} • PICK {current_pick} CLOCK</div>
+          <div id="clock" style="font-size:36px; font-weight:bold; color:#00ff00; line-height:1;">--</div>
+        </div>
+        <script>
+          var startTime = {start_time} * 1000;
+          var duration = 90 * 1000;
+          var endTime = startTime + duration;
+          var clockEl = document.getElementById('clock');
+          var timerBox = document.getElementById('timer-box');
+          
+          function update() {{
+            var now = new Date().getTime();
+            var timeLeft = Math.max(0, Math.ceil((endTime - now) / 1000));
+            clockEl.innerText = timeLeft;
+            if (timeLeft <= 15 && timeLeft > 0) {{
+              clockEl.style.color = '#ff4b4b';
+              timerBox.style.borderColor = '#ff4b4b';
+              timerBox.style.boxShadow = '0px 0px 10px rgba(255, 75, 75, 0.5)';
+            }} else if (timeLeft <= 0) {{
+              clockEl.innerText = "TIME OUT 🚨";
+              clockEl.style.color = '#ff4b4b';
+              timerBox.style.borderColor = '#ff4b4b';
+            }}
+          }}
+          update();
+          setInterval(update, 1000);
+        </script>
+        """
+        st.components.v1.html(timer_html, height=95, scrolling=False)
 
     if not available_df.empty:
         all_available_names = [str(x) for x in available_df["player_name"].tolist() if pd.notna(x) and str(x).strip() != ""]
@@ -433,7 +415,10 @@ with col1:
                 st.rerun()
         with btn_col2:
             if st.button("Undo Last Pick ⏪"):
-                if st.session_state.picks: st.session_state.picks.pop(); st.rerun()
+                if st.session_state.picks: 
+                    st.session_state.picks.pop()
+                    st.session_state.clock_starts.pop(f"pick_{current_pick-1}", None)
+                    st.rerun()
                 else: st.warning("No picks to undo!")
     else: st.write("No remaining players in the database pool.")
 
