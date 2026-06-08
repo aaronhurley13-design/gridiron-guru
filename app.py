@@ -159,7 +159,7 @@ def get_vbd_map(df, teams_count):
 
 title_col, image_col = st.columns([2, 1])
 with title_col: st.title("Gridiron Guru")
-with image_col: st.image("IMG_0106.png", width=300)
+with image_col: st.image("logo.png", width=150)
 
 with st.sidebar:
     st.header("⚙️ Settings & Imports")
@@ -236,29 +236,56 @@ def tag_formatter(player_name):
 # 🚨 FEATURE 2: LIVE OPPONENT NEEDS MATRIX
 # ==========================================
 st.markdown("---")
-st.header("👀 Next Up Draft Queue & Team Needs")
-upcoming_picks_teams = []
-for future_pick_offset in range(4):
-    f_pick = current_pick + future_pick_offset
-    f_round = (f_pick - 1) // teams + 1
-    f_p_in_round = (f_pick - 1) % teams + 1
-    f_team_id = (teams - f_p_in_round + 1) if (draft_type == "Snake" and f_round % 2 == 0) else f_p_in_round
-    if f_team_id not in upcoming_picks_teams:
-        upcoming_picks_teams.append(f_team_id)
+col_needs, col_alerts = st.columns(2)
 
-needs_cols = st.columns(len(upcoming_picks_teams))
-for idx, t_id in enumerate(upcoming_picks_teams):
-    t_name = team_name_map.get(t_id, f"Team {t_id}")
-    t_picks = [p for p in st.session_state.picks if p["team"] == t_id]
-    t_positions = [p["position"] for p in t_picks]
-    
-    with needs_cols[idx]:
-        is_me = " (YOU)" if t_id == my_team_id else ""
-        st.markdown(f"**📢 {t_name}{is_me}**")
-        if t_positions:
-            st.caption(f"Filled: {', '.join(t_positions)}")
+with col_needs:
+    st.header("👀 Upcoming Draft Team Needs")
+    upcoming_picks_teams = []
+    for future_pick_offset in range(4):
+        f_pick = current_pick + future_pick_offset
+        f_round = (f_pick - 1) // teams + 1
+        f_p_in_round = (f_pick - 1) % teams + 1
+        f_team_id = (teams - f_p_in_round + 1) if (draft_type == "Snake" and f_round % 2 == 0) else f_p_in_round
+        if f_team_id not in upcoming_picks_teams:
+            upcoming_picks_teams.append(f_team_id)
+
+    needs_cols = st.columns(len(upcoming_picks_teams))
+    for idx, t_id in enumerate(upcoming_picks_teams):
+        t_name = team_name_map.get(t_id, f"Team {t_id}")
+        t_picks = [p for p in st.session_state.picks if p["team"] == t_id]
+        t_positions = [p["position"] for p in t_picks]
+        
+        with needs_cols[idx]:
+            is_me = " (YOU)" if t_id == my_team_id else ""
+            st.markdown(f"**📢 {t_name}{is_me}**")
+            if t_positions:
+                st.caption(f"Filled: {', '.join(t_positions)}")
+            else:
+                st.caption("No players rostered yet.")
+
+# ==========================================
+# ⚠️ TIER DROP "CLIFF EDGE" ALERTS
+# ==========================================
+with col_alerts:
+    st.header("⚠️ Tier Drop Alerts")
+    if not available_df.empty:
+        alerts = []
+        for pos in ["QB", "RB", "WR", "TE"]:
+            pos_avail = available_df[available_df["position"] == pos].sort_values("projected_points", ascending=False)
+            if len(pos_avail) >= 2:
+                top_player = pos_avail.iloc[0]
+                next_player = pos_avail.iloc[1]
+                diff = top_player["projected_points"] - next_player["projected_points"]
+                
+                # If there's a 12+ point drop between the best and next best available...
+                if diff >= 12:
+                    alerts.append(f"**{pos} Cliff:** {top_player['player_name']} is the last in their tier! Next up is {next_player['player_name']} (a drop of {int(diff)} proj. pts).")
+        
+        if alerts:
+            for alert in alerts:
+                st.error(alert)
         else:
-            st.caption("No players rostered yet.")
+            st.success("✅ The board is stable. No major positional point cliffs detected right now.")
 
 # ==========================================
 # DRAFT QUEUE WITH POSITION FILTER & TAGS 🎯
@@ -332,11 +359,6 @@ with col1:
             valuation = "🔥 Value Pick"
         elif pick_diff <= -5:
             valuation = "🎈 Reach"
-
-        if team_id == my_team_id and pd.notna(detected_bye):
-            my_current_roster = [p for p in st.session_state.picks if p["team"] == my_team_id]
-            if [p["player"] for p in my_current_roster if p["position"] == detected_pos and p.get("bye_week") == detected_bye]:
-                st.error(f"🚨 **Bye-Week Collision:** You already drafted a **{detected_pos}** that has a Week {int(detected_bye)} bye!")
 
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
@@ -433,6 +455,36 @@ if req_flex > 0:
 if req_bench > 0:
     with prog_cols[col_index]:
         st.write(f"**BENCH** ({min(bench_overflow, req_bench)}/{req_bench})"); st.progress(min(bench_overflow / req_bench, 1.0) if req_bench > 0 else 1.0)
+
+# ==========================================
+# 🗓️ BYE-WEEK HEATMAP
+# ==========================================
+st.markdown("### 🗓️ Bye-Week Heatmap (My Team)")
+my_team_byes = []
+for p in my_roster_picks:
+    try:
+        my_team_byes.append(int(float(p.get("bye_week", 0))))
+    except:
+        pass
+
+# NFL Bye weeks typically range from Week 5 to 14
+bye_counts = {wk: 0 for wk in range(5, 15)}
+for bw in my_team_byes:
+    if bw in bye_counts:
+        bye_counts[bw] += 1
+
+heat_cols = st.columns(len(bye_counts))
+for i, (wk, count) in enumerate(bye_counts.items()):
+    with heat_cols[i]:
+        st.markdown(f"**Wk {wk}**")
+        if count == 0:
+            st.success(f"{count}")
+        elif count == 1:
+            st.info(f"{count}")
+        elif count == 2:
+            st.warning(f"{count}")
+        else:
+            st.error(f"{count}") # 3 or more players on bye is a huge danger zone!
 
 st.markdown("---")
 st.header("🤖 AI Advisor")
