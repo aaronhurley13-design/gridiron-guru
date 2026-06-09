@@ -110,6 +110,25 @@ def parse_gemini_response(text):
     try: return json.loads(t)
     except: return None
 
+def get_vbd_map(df, teams_count):
+    baselines = {}
+    positions = ["QB", "RB", "WR", "TE"]
+    limits = {"QB": teams_count, "RB": teams_count * 2, "WR": teams_count * 2, "TE": teams_count}
+    for pos in positions:
+        pos_players = df[df["position"].str.upper() == pos].sort_values(by="projected_points", ascending=False)
+        cutoff = limits[pos]
+        if len(pos_players) >= cutoff: baselines[pos] = pos_players.iloc[cutoff - 1]["projected_points"]
+        elif not pos_players.empty: baselines[pos] = pos_players.iloc[-1]["projected_points"]
+        else: baselines[pos] = 0
+            
+    vbd_dict = {}
+    for _, row in df.iterrows():
+        pos = str(row["position"]).upper()
+        base = baselines.get(pos, 0)
+        vbd_val = row["projected_points"] - base
+        vbd_dict[row["player_name"]] = int(vbd_val)
+    return vbd_dict
+
 if 'all_players' not in st.session_state: st.session_state.all_players = load_initial_player_pool()
 if 'picks' not in st.session_state: st.session_state.picks = []
 if 'queue' not in st.session_state: st.session_state.queue = [] 
@@ -205,7 +224,10 @@ def get_depletion(pos):
 # ==========================================
 # 🏷️ APP LOGO
 # ==========================================
-st.image("IMG_0106.png", width=120)
+try:
+    st.image("IMG_0106.png", width=120)
+except Exception:
+    pass
 
 # ==========================================
 # 📺 LIVE BROADCAST TICKER
@@ -222,7 +244,7 @@ if st.session_state.picks:
     st.markdown(ticker_html, unsafe_allow_html=True)
 
 # ==========================================
-# 🖥️ FEATURE 3: ZERO-SCROLL 3-COLUMN LAYOUT
+# 🖥️ ZERO-SCROLL 3-COLUMN LAYOUT
 # ==========================================
 col_left, col_center, col_right = st.columns([35, 35, 30])
 
@@ -272,21 +294,18 @@ with col_left:
     selected_team_name = st.selectbox(f"On the clock (Rd {round_num} Pk {current_pick}):", options=team_options, index=safe_index)
     team_id = team_options.index(selected_team_name) + 1
 
-    # ==========================================
-    # 🔍 FEATURE 2: PREDICTIVE FAST-TYPE SEARCH
-    # ==========================================
+    # Predictive Fast-Type Search Bar
     search_query = st.text_input("🔍 Fast-Search Player Name:", placeholder="Type 2-3 letters (e.g. McC)...").strip()
     
     if search_query and not available_df.empty:
         search_results = available_df[available_df["player_name"].str.contains(search_query, case=False, na=False)].head(4)
-        if not search_results.empty():
+        if not search_results.empty:
             st.markdown("**Search Matches:**")
             for _, s_row in search_results.iterrows():
                 p_name = s_row["player_name"]
                 p_pos = s_row["position"]
                 vbd_val = vbd_map.get(p_name, 0)
                 
-                # Fast Draft Trigger
                 if st.button(f"🏈 Draft {p_name} ({p_pos}) [VBD: +{vbd_val}]", key=f"search_dr_{p_name}", use_container_width=True):
                     orig_rank = int(s_row["rank"]) if "rank" in s_row else current_pick
                     valuation = "🔥 Value Pick" if (current_pick - orig_rank) >= 5 else ("🎈 Reach" if (current_pick - orig_rank) <= -5 else "Standard")
@@ -303,7 +322,6 @@ with col_left:
     all_available_names = sorted([str(x) for x in available_df["player_name"].tolist() if pd.notna(x)]) if not available_df.empty else []
     st.session_state.queue = st.multiselect("Pin players:", options=all_available_names, default=st.session_state.queue)
     
-    # 1-Tap Draft from Watchlist
     if st.session_state.queue:
         for q_player in st.session_state.queue:
             q_match = available_df[available_df["player_name"] == q_player]
@@ -344,7 +362,6 @@ with col_center:
             st.dataframe(display_df, use_container_width=True, height=300, hide_index=True)
 
 with col_right:
-    # Core calculations needed for dashboard tracking
     my_roster_picks = [p for p in st.session_state.picks if p["team"] == my_team_id]
     pos_counts = {}
     for p in my_roster_picks: pos_counts[p["position"]] = pos_counts.get(p["position"], 0) + 1
@@ -355,9 +372,7 @@ with col_right:
         if pos_counts.get(pos, 0) < reqs.get(pos, 0):
             my_needs.append(pos)
 
-    # ==========================================
-    # 🧠 GURU'S INSTANT ALGORITHMIC SUGGESTIONS
-    # ==========================================
+    # Algorithmic Top 3 Recommendations
     st.subheader("🧠 Guru's Top 3 Recommendations")
     if not available_df.empty:
         target_df = available_df.copy()
@@ -391,7 +406,7 @@ with col_right:
             st.caption(f"**{pos}** ({min(drafted_count, req_count)}/{req_count})")
             st.progress(min(drafted_count / req_count, 1.0))
 
-    # Live Standings mini chart
+    # Live Standings Projection
     st.markdown("---")
     st.subheader("📊 Standing Projections")
     if "player_name" in st.session_state.all_players.columns and "projected_points" in st.session_state.all_players.columns:
@@ -405,7 +420,7 @@ with col_right:
         standings_df = pd.DataFrame(standings_data).sort_values(by="Projected Points", ascending=False)
         st.dataframe(standings_df, hide_index=True, use_container_width=True, height=140)
 
-# Full analysis engines tucked safely out of the way into expanders at bottom
+# Deep Analytics Panel Hidden below
 st.markdown("---")
 with st.expander("🤖 External AI Advisor & Deep Analytics Panel"):
     if st.button("Generate Gemini Prompt"):
