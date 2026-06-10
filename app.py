@@ -225,7 +225,7 @@ def get_depletion(pos):
 # 🏷️ APP LOGO
 # ==========================================
 try:
-    st.image("IMG_0106.png", width=120)
+    st.image("IMG_0106.png", width=200)
 except Exception:
     pass
 
